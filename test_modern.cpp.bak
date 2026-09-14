@@ -1,9 +1,0 @@
-#include <cstdlib>
-
-void process() {
-    double temp = 36.6;
-    int int_temp = (int)temp;
-
-    char* buffer = (char*)malloc(256 * sizeof(char));
-    free(buffer);
-}

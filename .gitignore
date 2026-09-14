@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+*.bak
+test_*.cpp
+demo_*.cpp
