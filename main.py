@@ -1,31 +1,38 @@
 import sys
-from core.ai_agent import AIAgent
+import os
+import subprocess
+
+def show_menu():
+    print("================ 🛡️ C++20 OFFLINE AST TOOLKIT ================")
+    print("1. Qovluğu skan et və hesabat yarat (ast_engine.py)")
+    print("2. Son skan nəticələrinə avto-düzəliş tətbiq et (auto_fixer.py)")
+    print("3. Bütün testləri icra et (test_suite.py)")
+    print("4. Son skan hesabatına bax (scan_report.md)")
+    print("0. Çıxış")
+    print("===============================================================")
 
 def main():
-    print("=" * 55)
-    print("🛡️  SI-GUARD (Micro-LLM & Cyber Security Agent) Aktivdir")
-    print("Sual verin və ya əmr daxil edin. Çıxış üçün 'exit' yazın.")
-    print("=" * 55)
-    
-    agent = AIAgent()
-
     while True:
-        try:
-            user_input = input("\nSI-GUARD > ").strip()
-            if not user_input:
-                continue
-            if user_input.lower() in ["exit", "quit", "q"]:
-                print("👋 SI-GUARD dayandırıldı.")
-                break
-
-            response = agent.process_command(user_input)
-            print(f"\n{response}")
-
-        except (KeyboardInterrupt, EOFError):
-            print("\n👋 Çıxış edildi.")
+        show_menu()
+        choice = input("Seçiminizi edin (0-4): ").strip()
+        if choice == "1":
+            path = input("Skan ediləcək qovluq yolu (Varsayılan '.'): ").strip() or "."
+            subprocess.run([sys.executable, "ast_engine.py", path])
+        elif choice == "2":
+            subprocess.run([sys.executable, "auto_fixer.py"])
+        elif choice == "3":
+            subprocess.run([sys.executable, "test_suite.py"])
+        elif choice == "4":
+            if os.path.exists("scan_report.md"):
+                subprocess.run(["cat", "scan_report.md"])
+            else:
+                print("[!] Hesabat faylı (scan_report.md) tapılmadı.")
+        elif choice == "0":
+            print("[+] Çıxış edilir.")
             break
-        except Exception as e:
-            print(f"\n❌ Xəta baş verdi: {e}")
+        else:
+            print("[!] Yanlış seçim!")
+        print("\n")
 
 if __name__ == "__main__":
     main()
