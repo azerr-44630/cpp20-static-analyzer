@@ -1,0 +1,103 @@
+================================================================================
+C DİLİ VƏ SİSTEM PROQRAMLAŞDIRMA VAHİD ENSİKLOPEDİK TƏDRİS BAZASI
+================================================================================
+
+1. STANDART KİTABXANALAR VƏ FUNKSİYA PROTOTİPLƏRİ
+--------------------------------------------------------------------------------
+[ctype.h]
+- int isalpha(int c);  : Simvolun hərf (A-Z, a-z) olmasını yoxlayır.
+- int isdigit(int c);  : Simvolun rəqəm (0-9) olmasını yoxlayır.
+- int isalnum(int c);  : Hərf və ya rəqəm olmasını yoxlayır.
+- int isspace(int c);  : Boşluq simvollarını (' ', '\t', '\n', '\v', '\f', '\r') yoxlayır.
+- int ispunct(int c);  : Durğu işarələrini yoxlayır.
+- int isxdigit(int c); : Onaltılıq rəqəm (0-9, a-f, A-F) olmasını yoxlayır.
+- int toupper(int c);  : Kiçik hərfi böyük hərfə çevirir.
+- int tolower(int c);  : Böyük hərfi kiçik hərfə çevirir.
+
+[math.h] (Kompilyasiyada -lm tələb olunur)
+- double pow(double base, double exp);  : Qüvvət hesablama.
+- double sqrt(double x);               : Kvadrat kök alma.
+- double cbrt(double x);               : Kub kök alma.
+- double hypot(double x, double y);    : Hipotenuz tapma (daşmasız).
+- double ceil(double x);               : Üst tam ədədə yuvarlaqlaşdırma.
+- double floor(double x);              : Alt tam ədədə yuvarlaqlaşdırma.
+- double round(double x);              : Ən yaxın tam ədədə yuvarlaqlaşdırma.
+- double fmod(double x, double y);     : Uzanar nöqtəli ədədlərdə qalıq tapma.
+- double frexp(double val, int *exp);  : Mantissa və 2-nin qüvvətinə ayırma.
+- double ldexp(double x, int exp);     : x * (2^exp) hesablama.
+- double modf(double val, double *iptr): Tam və kəsr hissəyə ayırma.
+
+[time.h]
+- time_t time(time_t *timer);          : Unix zamanını saniyə ilə qaytarır.
+- struct tm *localtime(const time_t *t);: Yerli saat qurşağına çevirir.
+- struct tm *gmtime(const time_t *t);   : UTC zamanına çevirir.
+- time_t mktime(struct tm *timeptr);   : struct tm strukturunu saniyəyə çevirir.
+- size_t strftime(char *s, size_t max, const char *format, const struct tm *tm);
+- clock_t clock(void);                 : CPU takt sayını qaytarır (CLOCKS_PER_SEC).
+
+[errno.h / signal.h]
+- extern int errno;                    : Sistem xəta kodu.
+- void perror(const char *str);        : Xətanı mətn şəklində çapa verir.
+- void (*signal(int sig, void (*func)(int)))(int); : Siqnal tutucu təyin edir.
+  (SIGINT: Ctrl+C kəsilməsi, SIGSEGV: Yaddaş pozuntusu, SIGABRT: Anidən dayandırılma).
+- int raise(int sig);                  : Süni siqnal tetikləyir.
+
+[stdint.h / stddef.h]
+- int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t.
+- uintptr_t                            : Pointer ölçüsündə olan tam ədəd tipi.
+- offsetof(type, member)               : Struktur daxilində sahənin bayt sürüşməsi.
+
+2. YADDAŞ SEQMENTLƏRİ VƏ STRUKTUR PADDING
+--------------------------------------------------------------------------------
+- Code (Text) Segment : Yalnız oxunabilən binar kodlar.
+- Data Segment        : İlkin dəyəri olan qlobal/statik dəyişənlər.
+- BSS Segment         : İlkin dəyəri olmayan qlobal/statik dəyişənlər (avtomatik 0 olur).
+- Heap                : malloc/calloc/realloc/free ilə idarə olunan dinamik yaddaş.
+- Stack               : Lokal dəyişənlər və funksiya çərçivələri (LIFO).
+
+3. UNDEFINED BEHAVIOR (UB) SƏBƏBLƏRİ
+--------------------------------------------------------------------------------
+- Strict Aliasing Pozuntusu: Fərqli tipli pointerlərin eyni yaddaşı göstərməsi.
+- Signed Integer Overflow   : İşarəli tam ədədlərdə maksimum həddin aşılması.
+- Sequence Point Pozuntusu : i = i++ + ++i ifadəsində təyinatsız dəyişiklik.
+- Dangling Pointer          : free() edilmiş yaddaşa təkrar müraciət (Use-After-Free).
+- Null Pointer Dereference  : NULL ünvanından oxuma/yazma.
+- Buffer Overflow           : Massiv sərhədindən kənara çıxmaq.
+
+4. TAM KOD NÜMUNƏLƏRİ VƏ QABAQCIL KONSEPTLƏR
+--------------------------------------------------------------------------------
+[Funksiya Pointerləri və Jump Table]
+#include <stdio.h>
+int topla(int a, int b) { return a + b; }
+int cix(int a, int b) { return a - b; }
+int main() {
+    int (*isler[2])(int, int) = {topla, cix};
+    printf("Cem: %d\n", isler[0](10, 5));
+    printf("Cix: %d\n", isler[1](10, 5));
+    return 0;
+}
+
+[Flexible Array Members (C99)]
+#include <stdio.1>
+#include <stdlib.h>
+struct Paket {
+    int uzunluq;
+    char data[];
+};
+
+[Bit Operatorları və Bit Makroları]
+#define SET_BIT(num, n)    ((num) |= (1U << (n)))
+#define CLEAR_BIT(num, n)  ((num) &= ~(1U << (n)))
+#define TOGGLE_BIT(num, n) ((num) ^= (1U << (n)))
+#define CHECK_BIT(num, n)  (((num) >> (n)) & 1U)
+
+[POSIX Threads və Mutex Lock]
+#include <stdio.h>
+#include <pthread.h>
+pthread_mutex_t lock;
+void* worker(void* arg) {
+    pthread_mutex_lock(&lock);
+    printf("Thread ID: %d\n", *(int*)arg);
+    pthread_mutex_unlock(&lock);
+    return NULL;
+}

@@ -1,0 +1,14 @@
+#include <memory>
+class Base {
+public:
+    Base() {}
+    ~Base() {} // [HIGH] Non-virtual destructor
+};
+
+class ResourceHandler : public Base {
+private:
+    int* ptr; // [MEDIUM] Raw pointer
+public:
+    ResourceHandler() { ptr = std::make_unique<int[]>(50); } // [HIGH] Rule of 5 / Raw allocation
+    ~ResourceHandler() { delete[] ptr; } // [MEDIUM] Manual delete
+};
