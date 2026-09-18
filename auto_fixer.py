@@ -1,137 +1,93 @@
 import sqlite3
-import re
 import os
-import sys
+from ast_engine import CppASTAnalyzer
 
 DB_NAME = "agent_memory.db"
 
-class CppAutoFixer:
+class AutoFixer:
     def __init__(self, db_path=DB_NAME):
         self.db_path = db_path
+        self.analyzer = CppASTAnalyzer(db_path)
+        self._init_fix_table()
 
-    def ensure_memory_header(self, code: str) -> str:
-        """Koda `#include <memory>` başlığını əlavə edir."""
-        if "#include <memory>" not in code:
-            if "#include" in code:
-                code = re.sub(r"(#include\s+<[^>]+>\n)", r"\1#include <memory>\n", code, count=1)
-            else:
-                code = "#include <memory>\n" + code
-        return code
+    def _init_fix_table(self):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS fix_experience (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                problem_type TEXT NOT NULL,
+                old_code TEXT NOT NULL,
+                fix_applied TEXT NOT NULL,
+                compile_success INTEGER DEFAULT 0,
+                confidence REAL DEFAULT 0.5,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        conn.close()
 
-    def fix_virtual_destructor(self, code: str) -> str:
-        """Polimorfik və ya virtual metodu olan bütün siniflərdə destruktorlara `virtual` əlavə edir."""
-        def process_class(match):
-            class_decl = match.group(1)
-            class_body = match.group(2)
-            
-            # Sinifdə virtual funksiya varsa və ya başqa sinifdən miras alınıbsa
-            if "virtual" in class_body or ":" in class_decl:
-                def replace_destructor(d_match):
-                    indent = d_match.group(1)
-                    dest_sig = d_match.group(2)
-                    full_str = d_match.group(0)
-                    if "virtual" not in full_str:
-                        return f"{indent}virtual {dest_sig}"
-                    return full_str
-
-                class_body = re.sub(
-                    r"([ \t]*)(~[A-Za-z0-9_]+\s*\([^)]*\))",
-                    replace_destructor,
-                    class_body
-                )
-            return f"{class_decl}{class_body}"
-
-        pattern = r"(class\s+[A-Za-z0-9_]+[^{]*\{)([\s\S]*?\};)"
-        return re.sub(pattern, process_class, code)
-
-    def fix_raw_pointers_and_delete(self, code: str) -> str:
-        """Raw pointer və manual delete əməliyyatlarını std::make_unique ilə əvəz edir."""
-        code = re.sub(
-            r"(\w+)\s*=\s*new\s+(\w+)\[(.*?)\];",
-            r"\1 = std::make_unique<\2[]>(\3);",
-            code
-        )
-        code = re.sub(
-            r"(\w+)\s*=\s*new\s+(\w+)\((.*?)\);",
-            r"\1 = std::make_unique<\2>(\3);",
-            code
-        )
-        code = re.sub(r"^\s*delete\[\]\s+\w+;\n?", "", code, flags=re.MULTILINE)
-        code = re.sub(r"^\s*delete\s+\w+;\n?", "", code, flags=re.MULTILINE)
-        return code
-
-    def fix_c_style_memory(self, code: str) -> str:
-        """malloc/calloc/free əməliyyatlarını RAII və std::make_unique ilə əvəz edir."""
-        code = re.sub(
-            r"(\w+)\s*=\s*(?:\(\s*\w+\s*\*\s*\))?\s*malloc\s*\(\s*(.*?)\s*\*\s*sizeof\s*\(\s*(\w+)\s*\)\s*\);",
-            r"\1 = std::make_unique<\3[]>(\2);",
-            code
-        )
-        code = re.sub(
-            r"(\w+)\s*=\s*(?:\(\s*\w+\s*\*\s*\))?\s*malloc\s*\(\s*sizeof\s*\(\s*(\w+)\s*\)\s*\);",
-            r"\1 = std::make_unique<\2>();",
-            code
-        )
-        code = re.sub(r"^\s*free\s*\(\s*\w+\s*\);\n?", "", code, flags=re.MULTILINE)
-        return code
-
-    def fix_c_style_casts(self, code: str) -> str:
-        """C-style cast əməliyyatlarını static_cast ilə əvəz edir."""
-        primitive_types = r"int|float|double|char|bool|size_t|uint32_t|int32_t|long|short"
-        code = re.sub(
-            rf"\(\s*({primitive_types})\s*\)\s*([a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*|\-\>[a-zA-Z_]\w*)?)",
-            r"static_cast<\1>(\2)",
-            code
-        )
-        return code
-
-    def apply_fixes_to_file(self, file_path: str):
+    def fix_file(self, file_path: str):
         if not os.path.exists(file_path):
             print(f"[!] Fayl tapılmadı: {file_path}")
             return False
 
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            original_code = f.read()
+        with open(file_path, "r", encoding="utf-8") as f:
+            code = f.read()
 
-        modified_code = original_code
-        modified_code = self.ensure_memory_header(modified_code)
-        modified_code = self.fix_virtual_destructor(modified_code)
-        modified_code = self.fix_raw_pointers_and_delete(modified_code)
-        modified_code = self.fix_c_style_memory(modified_code)
-        modified_code = self.fix_c_style_casts(modified_code)
-
-        if modified_code != original_code:
-            backup_path = file_path + ".bak"
-            with open(backup_path, "w", encoding="utf-8") as f:
-                f.write(original_code)
-
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(modified_code)
-
-            print(f"[+] Refaktor uğurla tətbiq edildi: {file_path}")
-            print(f"[+] Ehtiyat nüsxə yaradıldı: {backup_path}")
-            return True
-        else:
-            print(f"[*] Düzəliş edilməli xəta tapılmadı və ya fayl artıq yenilənib: {file_path}")
+        issues = self.analyzer.analyze_code(code, file_path)
+        if not issues:
+            print("[+] Düzəldiləcək xəta tapılmadı.")
             return False
 
-    def fix_latest_scan_results(self):
+        modified_code = code
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        cursor.execute("SELECT DISTINCT file_path FROM scan_results WHERE scan_time = (SELECT MAX(scan_time) FROM scan_results)")
-        rows = cursor.fetchall()
+
+        fixed_count = 0
+        for issue in issues:
+            p_type = issue["problem_type"]
+            old_code = issue["old_code"]
+            details = issue["details"]
+
+            if p_type == "raw_pointer_array":
+                elem_type = details["elem_type"]
+                var_name = details["var_name"]
+                size = details["size"]
+                
+                new_code_snippet = f"std::vector<{elem_type}> {var_name}({size});"
+                if old_code in modified_code:
+                    modified_code = modified_code.replace(old_code, new_code_snippet)
+                    fixed_count += 1
+                    
+                    cursor.execute("""
+                        INSERT INTO fix_experience (problem_type, old_code, fix_applied, compile_success, confidence)
+                        VALUES (?, ?, ?, 1, 0.95)
+                    """, (p_type, old_code, new_code_snippet))
+
+        conn.commit()
         conn.close()
 
-        if not rows:
-            print("[!] Bazada düzəldilməli fayl tapılmadı.")
-            return
+        if fixed_count > 0:
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(modified_code)
+            print(f"[SUCCESS] {fixed_count} ədəd xəta avtomatik düzəldildi və yaddaşa yazıldı.")
+            return True
 
-        for (file_path,) in rows:
-            self.apply_fixes_to_file(file_path)
+        return False
 
 if __name__ == "__main__":
-    fixer = CppAutoFixer()
-    if len(sys.argv) > 1:
-        fixer.apply_fixes_to_file(sys.argv[1])
-    else:
-        fixer.fix_latest_scan_results()
+    test_file = "main.cpp"
+    with open(test_file, "w", encoding="utf-8") as f:
+        f.write("""#include <iostream>\n#include <vector>\n\nint main() {\n    int* arr = new int[50];\n    return 0;\n}\n""")
+    
+    print("--- Düzəlişdən əvvəl main.cpp ---")
+    with open(test_file, "r") as f:
+        print(f.read())
+
+    fixer = AutoFixer()
+    fixer.fix_file(test_file)
+
+    print("--- Düzəlişdən sonra main.cpp ---")
+    with open(test_file, "r") as f:
+        print(f.read())
