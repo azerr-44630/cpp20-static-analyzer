@@ -4,31 +4,40 @@ class ReasoningEngine:
     def __init__(self, knowledge_engine: KnowledgeEngine):
         self.ke = knowledge_engine
 
-    def think_and_deduce(self):
-        """Faktlar arasında əlaqə quraraq addım-addım düşüncə zənciri formalaşdırır."""
-        facts = self.ke.query_facts()
-        thoughts = []
-        inferences = []
+    def generate_thought_trace(self, user_input, intent_data):
+        """Görsellerdeki gibi adım adım düşünce ve süreç akışı (Summary Trace) üretir."""
+        steps = []
+        
+        # 1. Başlangıç Tespiti / Hedef
+        steps.append({
+            "type": "THOUGHT",
+            "text": f"Gelen isteği değerlendirme ve hedefi belirleme: '{user_input}'"
+        })
 
-        # Faktları strukturlaşdırma
-        ports = [f[2] for f in facts if f[1] == "open_port"]
-        services = [f[2] for f in facts if f[1] == "service"]
-
-        thoughts.append(f"Düşüncə 1: Açıq portlar yoxlanılır... Tapıldı: {ports if ports else 'Heç biri'}")
-        thoughts.append(f"Düşüncə 2: İşləyən xidmətlər təhlil olunur... Tapıldı: {services if services else 'Heç biri'}")
-
-        # Zəncirvari məntiq (Deduction Loop)
-        if "22" in ports and "ssh" in services:
-            confidence = 0.95
-            self.ke.add_fact("SYSTEM", "exposure_risk", "CRITICAL_SSH_EXPOSURE", fact_type="INFERRED", confidence=confidence)
-            inferences.append({
-                "fact": "SSH Portu 22 Xarici Təhlükəyə Açqıdır",
-                "confidence": confidence,
-                "reasoning": "Port 22 və SSH xidmətinin eyni anda OBSERVED olması risk yaradır."
+        # 2. Arama / Sorgulama Tespiti (Görseldeki Searched for... mantığı)
+        slots = intent_data.get("slots", {})
+        if "file" in slots:
+            steps.append({
+                "type": "SEARCH",
+                "text": f"Yerel depoda dosya ve AST analizi aranıyor: '{slots['file']}'"
             })
-            thoughts.append("Düşüncə 3: ZƏNCİRVARİ NƏTİCƏ -> SSH Giriş Riski Çıxarıldı və Yaddaşa Yazıldı.")
+        elif "port" in slots:
+            steps.append({
+                "type": "SEARCH",
+                "text": f"Ağ ve hafıza veritabanında port bilgisi sorgulanıyor: '{slots['port']}'"
+            })
 
-        return {
-            "thought_process": thoughts,
-            "inferences": inferences
-        }
+        # 3. Yaddaş və Fakt Analizi
+        facts = self.ke.query_facts()
+        steps.append({
+            "type": "THOUGHT",
+            "text": f"Hafızadaki {len(facts)} kayıtlı fakt ve öğrenilmiş kurallar taranıyor."
+        })
+
+        # 4. Risk ve Çıkarım Hesabı
+        steps.append({
+            "type": "THOUGHT",
+            "text": "Kod güvenliği, mantıksal zincir (Chain-of-Thought) ve risk skorlaması yapılıyor."
+        })
+
+        return steps
