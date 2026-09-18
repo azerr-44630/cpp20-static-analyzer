@@ -1,82 +1,55 @@
-import sqlite3
-import re
 import os
-
-DB_NAME = "agent_memory.db"
+import re
 
 class CppASTAnalyzer:
-    def __init__(self, db_path=DB_NAME):
-        self.db_path = db_path
+    def __init__(self):
+        self.issues = []
 
-    def analyze_code(self, code: str, file_path: str = "main.cpp"):
-        issues = []
-        lines = code.split("\n")
+    def analyze_file(self, file_path):
+        file_issues = []
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
 
-        # 1. Raw Pointer Array Allocation
-        raw_ptr_pattern = r"(\w+)\s*\*\s*(\w+)\s*=\s*new\s+(\w+)\s*\[\s*(.*?)\s*\];"
-        for line_idx, line in enumerate(lines, 1):
-            match = re.search(raw_ptr_pattern, line)
-            if match:
-                ptr_type, var_name, elem_type, size = match.groups()
-                issues.append({
-                    "file_path": file_path,
-                    "line_number": line_idx,
-                    "problem_type": "raw_pointer_array",
-                    "old_code": match.group(0),
-                    "details": {
-                        "ptr_type": ptr_type,
-                        "var_name": var_name,
-                        "elem_type": elem_type,
-                        "size": size
-                    },
-                    "confidence": 0.95
-                })
+            for idx, line in enumerate(lines, 1):
+                # Xam pointer massiv pattern-i: new T[...]
+                if re.search(r'\bnew\s+\w+\s*\[', line):
+                    issue = {
+                        "file": file_path,
+                        "line": idx,
+                        "type": "raw_pointer_array",
+                        "code": line.strip()
+                    }
+                    file_issues.append(issue)
+                    self.issues.append(issue)
+        except Exception as e:
+            print(f"  [x] Fayl oxunmadı ({file_path}): {e}")
+        return file_issues
 
-        # 2. C-Style Cast
-        c_cast_pattern = r"\(\s*(int|float|double|char|bool|size_t)\s*\)\s*([a-zA-Z_]\w*)"
-        for line_idx, line in enumerate(lines, 1):
-            match = re.search(c_cast_pattern, line)
-            if match:
-                target_type, var_name = match.groups()
-                issues.append({
-                    "file_path": file_path,
-                    "line_number": line_idx,
-                    "problem_type": "c_style_cast",
-                    "old_code": match.group(0),
-                    "details": {
-                        "target_type": target_type,
-                        "var_name": var_name
-                    },
-                    "confidence": 0.90
-                })
+    def analyze_directory(self, directory="."):
+        self.issues = []
+        cpp_extensions = (".cpp", ".cc", ".cxx", ".h", ".hpp")
+        for root, dirs, files in os.walk(directory):
+            if ".git" in root or "node_modules" in root:
+                continue
+            for file in files:
+                if file.endswith(cpp_extensions):
+                    file_path = os.path.join(root, file)
+                    self.analyze_file(file_path)
+        return self.issues
 
-        # 3. C-Style Malloc Allocation
-        malloc_pattern = r"(\w+)\s*=\s*(?:\(\s*\w+\s*\*\s*\))?\s*malloc\s*\(\s*(.*?)\s*\);"
-        for line_idx, line in enumerate(lines, 1):
-            match = re.search(malloc_pattern, line)
-            if match:
-                var_name, size_expr = match.groups()
-                issues.append({
-                    "file_path": file_path,
-                    "line_number": line_idx,
-                    "problem_type": "c_style_malloc",
-                    "old_code": match.group(0),
-                    "details": {
-                        "var_name": var_name,
-                        "size_expr": size_expr
-                    },
-                    "confidence": 0.92
-                })
-
-        return issues
-
-    def analyze_file(self, file_path: str):
-        if not os.path.exists(file_path):
-            return []
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            code = f.read()
-        return self.analyze_code(code, file_path)
+def scan_code(directory="."):
+    analyzer = CppASTAnalyzer()
+    issues = analyzer.analyze_directory(directory)
+    print(f"\n[AST ENGINE] '{directory}' qovluğunda C++ faylları yoxlanılır...")
+    if not issues:
+        print("  [✓] Heç bir təhlükəli xam pointer massiv pattern-i tapılmadı.")
+    else:
+        for issue in issues:
+            print(f"  [!] Təhlükəli Pattern ({issue['type']}): {issue['file']}:{issue['line']}")
+            print(f"      Kod: {issue['code']}")
+        print(f"  [!] Skan başa çatdı. Cəmi {len(issues)} problem tapıldı.")
+    return issues
 
 if __name__ == "__main__":
-    analyzer = CppASTAnalyzer()
-    print("[+] ast_engine.py Agentic Loop strukturuna hazır vəziyyətə gətirildi.")
+    scan_code()

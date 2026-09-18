@@ -1,5 +1,6 @@
-import sqlite3
 import os
+import sqlite3
+import re
 from ast_engine import CppASTAnalyzer
 
 DB_NAME = "agent_memory.db"
@@ -7,87 +8,101 @@ DB_NAME = "agent_memory.db"
 class AutoFixer:
     def __init__(self, db_path=DB_NAME):
         self.db_path = db_path
-        self.analyzer = CppASTAnalyzer(db_path)
-        self._init_fix_table()
+        self._init_db()
 
-    def _init_fix_table(self):
+    def _init_db(self):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS fix_experience (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                problem_type TEXT NOT NULL,
-                old_code TEXT NOT NULL,
-                fix_applied TEXT NOT NULL,
-                compile_success INTEGER DEFAULT 0,
-                confidence REAL DEFAULT 0.5,
+                file_path TEXT NOT NULL,
+                line_number INTEGER NOT NULL,
+                original_code TEXT NOT NULL,
+                fixed_code TEXT NOT NULL,
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
         conn.commit()
         conn.close()
 
-    def fix_file(self, file_path: str):
-        if not os.path.exists(file_path):
-            print(f"[!] Fayl tapılmadı: {file_path}")
-            return False
+    def fix_file(self, file_path, issues):
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        except Exception as e:
+            print(f"  [x] Fayl oxunmadı ({file_path}): {e}")
+            return
 
-        with open(file_path, "r", encoding="utf-8") as f:
-            code = f.read()
-
-        issues = self.analyzer.analyze_code(code, file_path)
-        if not issues:
-            print("[+] Düzəldiləcək xəta tapılmadı.")
-            return False
-
-        modified_code = code
+        file_fixed = False
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
-        fixed_count = 0
         for issue in issues:
-            p_type = issue["problem_type"]
-            old_code = issue["old_code"]
-            details = issue["details"]
+            if issue["file"] != file_path:
+                continue
+            idx = issue["line"] - 1
+            if idx >= len(lines):
+                continue
+            orig = lines[idx]
 
-            if p_type == "raw_pointer_array":
-                elem_type = details["elem_type"]
-                var_name = details["var_name"]
-                size = details["size"]
-                
-                new_code_snippet = f"std::vector<{elem_type}> {var_name}({size});"
-                if old_code in modified_code:
-                    modified_code = modified_code.replace(old_code, new_code_snippet)
-                    fixed_count += 1
-                    
-                    cursor.execute("""
-                        INSERT INTO fix_experience (problem_type, old_code, fix_applied, compile_success, confidence)
-                        VALUES (?, ?, ?, 1, 0.95)
-                    """, (p_type, old_code, new_code_snippet))
+            # Xam pointer massivini std::vector-ə keçirən refaktorinq pattern-i
+            match = re.search(r'(\w+)\s*\*\s*(\w+)\s*=\s*new\s+(\w+)\s*\[\s*(.*?)\s*\]', orig)
+            if match:
+                t_type, var_name, elem_type, size_expr = match.groups()
+                fixed = f"    std::vector<{elem_type}> {var_name}({size_expr}); // Auto-fixed by V6 Agent\n"
+                lines[idx] = fixed
+                file_fixed = True
+
+                cursor.execute("""
+                    INSERT INTO fix_experience (file_path, line_number, original_code, fixed_code)
+                    VALUES (?, ?, ?, ?)
+                """, (file_path, issue["line"], orig.strip(), fixed.strip()))
+                print(f"  [FIXED] {file_path}:{issue['line']} -> {fixed.strip()}")
+
+        if file_fixed:
+            try:
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.writelines(lines)
+            except Exception as e:
+                print(f"  [x] Fayla yazılmadı ({file_path}): {e}")
 
         conn.commit()
         conn.close()
 
-        if fixed_count > 0:
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(modified_code)
-            print(f"[SUCCESS] {fixed_count} ədəd xəta avtomatik düzəldildi və yaddaşa yazıldı.")
-            return True
+    def run_fixes(self, directory="."):
+        analyzer = CppASTAnalyzer()
+        issues = analyzer.analyze_directory(directory)
+        if not issues:
+            print("  [✓] Düzəliş ediləcək problem tapılmadı.")
+            return
 
-        return False
+        files_with_issues = set(i["file"] for i in issues)
+        for fp in files_with_issues:
+            self.fix_file(fp, issues)
+
+def apply_auto_fix(directory="."):
+    fixer = AutoFixer()
+    fixer.run_fixes(directory)
+
+def show_fix_history():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, file_path, line_number, original_code, fixed_code, timestamp FROM fix_experience")
+    rows = cursor.fetchall()
+    conn.close()
+
+    print("\n[FIX EXPERIENCE HISTORY]")
+    print("=" * 60)
+    if not rows:
+        print("  [!] Hələlik heç bir düzəliş qeydə alınmayıb.")
+        return
+
+    for row in rows:
+        print(f" ID: {row[0]} | Fayl: {row[1]}:{row[2]} | Vaxt: {row[5]}")
+        print(f"   Köhnə: {row[3]}")
+        print(f"   Yeni : {row[4]}")
+        print("-" * 60)
 
 if __name__ == "__main__":
-    test_file = "main.cpp"
-    with open(test_file, "w", encoding="utf-8") as f:
-        f.write("""#include <iostream>\n#include <vector>\n\nint main() {\n    int* arr = new int[50];\n    return 0;\n}\n""")
-    
-    print("--- Düzəlişdən əvvəl main.cpp ---")
-    with open(test_file, "r") as f:
-        print(f.read())
-
-    fixer = AutoFixer()
-    fixer.fix_file(test_file)
-
-    print("--- Düzəlişdən sonra main.cpp ---")
-    with open(test_file, "r") as f:
-        print(f.read())
+    apply_auto_fix()

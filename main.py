@@ -1,61 +1,58 @@
 import os
-from auto_fixer import AutoFixer
+import sys
+from ast_engine import scan_code
+from auto_fixer import apply_auto_fix
+from memory_test import V5MemoryTester
+from knowledge_graph import V6KnowledgeGraph
 
-def show_menu():
-    print("\n==========================================")
-    print("      si-learn-first | C++ Agent")
-    print("==========================================")
-    print("1. Qovluğu skan et və hesabat yarat (ast_engine.py)")
-    print("2. Son skan nəticələrinə avto-düzəliş tətbiq et (auto_fixer.py)")
-    print("3. Bütün testləri icra et (memory_test.py)")
-    print("4. Son düzəliş təcrübələrinə bax (Agent Memory)")
-    print("0. Çıxış")
-    print("==========================================")
+def print_menu():
+    print("\n" + "="*50)
+    print("   [ cpp20-static-analyzer | Agentic CLI v6.0 ]")
+    print("="*50)
+    print(" 1 -> C++ Kodunu Skan Et (Analyze)")
+    print(" 2 -> Avtomatik Düzəliş Tətbiq Et (Auto-Fix & Log)")
+    print(" 3 -> V5 İnam Azalması və Konflikt Testi (Memory Engine)")
+    print(" 4 -> Keçmiş Düzəliş Təcrübələrini Göstər (fix_experience)")
+    print(" 5 -> V6 Knowledge Graph Analizatoru (Zəncirvari Məntiq)")
+    print(" 0 -> Çıxış")
+    print("="*50)
 
 def main():
-    fixer = AutoFixer()
-    
     while True:
-        show_menu()
-        choice = input("Seçiminizi daxil edin (0-4): ").strip()
+        print_menu()
+        choice = input("Seçiminiz (0-5): ").strip()
         
         if choice == "1":
-            print("\n[+] Skan edilən fayl: main.cpp")
-            issues = fixer.analyzer.analyze_code(open("main.cpp").read(), "main.cpp")
-            if issues:
-                print(f"[!] {len(issues)} problem aşkarlandı:")
-                for i in issues:
-                    print(f"    - Sətir {i['line_number']}: {i['old_code']} ({i['problem_type']})")
-            else:
-                print("[+] Heç bir problem tapılmadı.")
-                
+            print("\n[+] Kod skan edilir...")
+            scan_code()
+            
         elif choice == "2":
-            print("\n[+] Avtomatik düzəliş tətbiq edilir...")
-            fixer.fix_file("main.cpp")
+            print("\n[+] Avtomatik düzəlişlər tətbiq edilir...")
+            apply_auto_fix()
             
         elif choice == "3":
-            print("\n[+] Yaddaş və məntiq testləri işə salınır...")
-            os.system("python3 memory_test.py")
+            print("\n[+] V5 Yaddaş və İnam Mexanizmi işə düşür...")
+            tester = V5MemoryTester()
+            tester.run_test_cycle()
             
         elif choice == "4":
-            import sqlite3
-            conn = sqlite3.connect("agent_memory.db")
-            cursor = conn.cursor()
-            cursor.execute("SELECT problem_type, old_code, fix_applied, confidence, timestamp FROM fix_experience")
-            rows = cursor.fetchall()
-            conn.close()
+            print("\n[+] fix_experience cədvəlindəki təcrübələr oxunur...")
+            from auto_fixer import show_fix_history
+            show_fix_history()
             
-            print("\n--- Agent Təcrübə Bazası (Fix Experience) ---")
-            if not rows:
-                print("Hələ heç bir təcrübə qeydə alınmayıb.")
-            for r in rows:
-                print(f"• Xəta: {r[0]} | Köhnə: {r[1]} ➔ Yeni: {r[2]} | İnam: {r[3]} | Vaxt: {r[4]}")
-                
+        elif choice == "5":
+            print("\n[+] V6 Bilik Qrafı Analizi işə düşür...")
+            kg = V6KnowledgeGraph()
+            target_key = input("Kanalizasiya üçün Root Node daxil edin (məs: raw_pointer_array): ").strip()
+            if not target_key:
+                target_key = "raw_pointer_array"
+            kg.explain_impact(target_key)
+            
         elif choice == "0":
-            print("\n[+] Sistemdən çıxılır. Uğurlar!")
-            break
+            print("\nProqramdan çıxılır. Sağ olun!")
+            sys.exit(0)
         else:
-            print("\n[!] Yanlış seçim, yenidən sınayın.")
+            print("\n[!] Yanlış seçim, yenidən cəhd edin.")
 
 if __name__ == "__main__":
     main()
