@@ -2,40 +2,25 @@ import re
 
 class CyberDefenseEngine:
     def __init__(self):
-        # Təhlükə İmzaları
-        self.sqli_pattern = r"(?i)(\bUNION\b\s+\bSELECT\b|;\s*\bDROP\b\s+\bTABLE\b)"
-        self.rce_pattern = r"(;|\|\||&&)\s*(cat /etc/passwd|rm -rf|wget)"
+        # Təhlükəli pattern-lər və injection siyahısı
+        self.blocked_patterns = [
+            r"(\bDROP\b|\bDELETE\b|\bINSERT\b).*\bFROM\b", # Basic SQLi
+            r"<script.*?>.*?</script>",                   # XSS
+            r"(\bexec\b|\beval\b|\bsystem\b)\s*\(",        # Command Injection
+            r"\.\./\.\./",                                 # Path Traversal
+            r"(\bunion\b.*\bselect\b)"                    # SQLi Union
+        ]
 
-    def analyze_payload(self, raw_input: str, context: str = "PRODUCTION"):
-        # 1. NORMALIZE
-        normalized = raw_input.strip()
-
-        # 2. SIGNATURE DETECTION
-        has_sqli = bool(re.search(self.sqli_pattern, normalized))
-        has_rce = bool(re.search(self.rce_pattern, normalized))
-
-        # 3. STRUCTURAL & CONTEXT ANALYSIS
-        risk_score = 0
-        if has_rce:
-            risk_score += 90
-        elif has_sqli:
-            risk_score += 70
-
-        # Əgər kontekst TEST və ya EDUCATION-dırsa, birbaşa BLOCK etmirik
-        if context in ["TEST", "DEBUG", "EDUCATION"]:
-            risk_score -= 30
-
-        # 4. DECISION PIPELINE (DETECT -> VERIFY -> LOG -> POLICY CHECK -> BLOCK)
-        if risk_score >= 80:
-            decision = "BLOCK"
-        elif risk_score >= 40:
-            decision = "SUSPICIOUS"
-        else:
-            decision = "SAFE"
-
+    def inspect_payload(self, raw_input: str):
+        """Gələn sorğunu kiber-təhlükələrə qarşı skan edir."""
+        for pattern in self.blocked_patterns:
+            if re.search(pattern, raw_input, re.IGNORECASE):
+                return {
+                    "status": "BLOCKED",
+                    "reason": f"Təhlükəli pattern aşkar edildi: {pattern}"
+                }
+        
         return {
-            "input": raw_input,
-            "risk_score": max(0, risk_score),
-            "decision": decision,
-            "pipeline_status": f"DETECTED -> VERIFIED -> DECISION [{decision}]"
+            "status": "CLEAN",
+            "reason": "Payload təhlükəsizdir."
         }
