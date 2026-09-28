@@ -1,3 +1,4 @@
+import re
 from brain.tool_manager import ToolManager
 
 class ReasoningEngine:
@@ -7,46 +8,66 @@ class ReasoningEngine:
 
     def generate_thought_trace(self, prompt: str, intent_data: dict):
         steps = []
+        output_payload = ""
+
+        steps.append({
+            "type": "THOUGHT",
+            "text": f"Tapşırıq daxil oldu: '{prompt}'"
+        })
+
         prompt_lower = prompt.lower()
 
-        steps.append({
-            "type": "THOUGHT",
-            "text": f"Sorğu analiz edilir və alət ehtiyacı yoxlanılır: '{prompt}'"
-        })
+        # 1. GitHub Repo İnceleme (ör. github.com/kullanici/repo veya repo oku/bax)
+        if "github.com/" in prompt_lower and prompt_lower.count("/") >= 2:
+            repo_match = re.search(r'github\.com/([a-zA-Z0-9-]+/[a-zA-Z0-9-_]+)', prompt)
+            if repo_match:
+                repo_path = repo_match.group(1)
+                steps.append({"type": "THOUGHT", "text": f"GitHub deponuz tespit edildi: '{repo_path}'"})
+                res = self.tool_manager.execute_tool("repo_inspect", repo_path)
+                output_payload = res
+                steps.append({"type": "OBSERVATION", "text": "Depo README dosyası incelendi."})
 
-        # 1. Alət Çağırış Məntiqi (Tool Execution Router)
-        if any(k in prompt_lower for k in ["hesabla", "kalkulyator", "math", "+", "*", "/"]):
-            expression = prompt.replace("hesabla", "").strip()
-            steps.append({"type": "ACTION_PLAN", "text": f"'calculator' aləti işə salınır: {expression}"})
-            output_payload = self.tool_manager.execute_tool("calculator", expression)
+        # 2. GitHub Profil Analizi
+        elif "github.com/" in prompt_lower or ("github" in prompt_lower and "/" in prompt_lower):
+            user_match = re.search(r'github\.com/([a-zA-Z0-9-]+)', prompt)
+            username = user_match.group(1) if user_match else prompt
+            steps.append({"type": "THOUGHT", "text": f"GitHub profili tespit edildi: '{username}'"})
+            res = self.tool_manager.execute_tool("github_osint", username)
+            output_payload = res
+            steps.append({"type": "OBSERVATION", "text": "Profil verileri API üzerinden çekildi."})
 
-        elif any(k in prompt_lower for k in ["sistem", "os", "specs", "mühit"]):
-            steps.append({"type": "ACTION_PLAN", "text": "'system_info' aləti işə salınır."})
-            output_payload = self.tool_manager.execute_tool("system_info", "")
+        # 3. Sistem Bilgisi Sorgusu
+        elif any(k in prompt_lower for k in ["sistem", "termux", "specs", "donanım", "sistem bilgisi"]):
+            steps.append({"type": "THOUGHT", "text": "Sistem bilgileri toplanıyor..."})
+            res = self.tool_manager.execute_tool("system_info", "")
+            output_payload = res
+            steps.append({"type": "OBSERVATION", "text": "Sistem detayları çekildi."})
 
-        elif prompt_lower.startswith("oxu ") or prompt_lower.startswith("read "):
-            filepath = prompt.split(" ", 1)[1].strip()
-            steps.append({"type": "ACTION_PLAN", "text": f"'file_reader' aləti işə salınır: {filepath}"})
-            output_payload = self.tool_manager.execute_tool("file_reader", filepath)
+        # 4. Genel URL İnceleme
+        elif re.search(r'(https?://[^\s\]\)]+|[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:/[^\s\]\)]*)?)', prompt) and ("/" in prompt or "http" in prompt_lower or "oxu" in prompt_lower):
+            url_match = re.search(r'(https?://[^\s\]\)]+|[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:/[^\s\]\)]*)?)', prompt)
+            raw_url = url_match.group(0)
+            clean_url = self.tool_manager.clean_target_url(raw_url)
+            steps.append({"type": "THOUGHT", "text": f"Sayfa içeriği çekiliyor: '{clean_url}'"})
+            res = self.tool_manager.execute_tool("web_fetch", clean_url)
+            output_payload = res
+            steps.append({"type": "OBSERVATION", "text": "İçerik okundu."})
 
-        # 2. Əgər spesifik alət lazımdırsa, Semantik Yaddaş Bazasında Axtarış
+        # 5. Domain OSINT
+        elif any(k in prompt_lower for k in ["osint", "ip", "server", "header", "domen təhlil"]):
+            domains = re.findall(r'(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}', prompt)
+            domain = domains[0] if domains else prompt
+            steps.append({"type": "THOUGHT", "text": f"Domen OSINT analizi icra olunur: '{domain}'"})
+            res = self.tool_manager.execute_tool("domain_osint", domain)
+            output_payload = res
+            steps.append({"type": "OBSERVATION", "text": "OSINT analizi tamamlandı."})
+
+        # 6. Canlı Web Araması
         else:
-            steps.append({"type": "THOUGHT", "text": "Semantik yaddaş bazasında axtarış aparılır..."})
-            matched_facts = self.ke.search_facts(prompt)
+            steps.append({"type": "THOUGHT", "text": f"İnternetdə canlı axtarış aparılır: '{prompt}'"})
+            search_res = self.tool_manager.execute_tool("web_search", prompt)
+            output_payload = search_res
+            steps.append({"type": "OBSERVATION", "text": "İnternet axtarışı yekunlaşdı."})
 
-            if matched_facts:
-                steps.append({"type": "ACTION_PLAN", "text": f"Semantik yaddaşdan ({len(matched_facts)}) fakt tapıldı."})
-                payload_lines = ["### Semantik Yaddaş Bazasından Faktlar:\n"]
-                for cat, topic, content in matched_facts:
-                    payload_lines.append(f"• [{cat} / {topic}]: {content}")
-                output_payload = "\n".join(payload_lines)
-            else:
-                steps.append({"type": "ACTION_PLAN", "text": "Uyğun alət və ya yaddaş faktı tapılmadı."})
-                output_payload = f"'{prompt}' barədə məlumat tapılmadı. Mövcud alətlər: {list(self.tool_manager.get_available_tools().keys())}"
-
-        steps.append({
-            "type": "THOUGHT",
-            "text": "Nəticə generasiya edildi."
-        })
-
+        steps.append({"type": "THOUGHT", "text": "Həll tamamlandı."})
         return steps, output_payload
