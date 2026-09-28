@@ -8,3 +8,5 @@ scan_report.json
 output_report.html
 logs/
 .env
+.license_accepted
+logs/

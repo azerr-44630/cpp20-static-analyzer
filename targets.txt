@@ -1,0 +1,2 @@
+# Hər sətirdə bir domen və ya IP. Yalnız buradakılara icazə var.
+example.com

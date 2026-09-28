@@ -106,26 +106,28 @@ class ToolManager:
 
     def web_search(self, query: str, limit: int = 5) -> str:
         try:
-            url = f"https://html.duckduckgo.com/html/?q={requests.utils.quote(query)}"
+            url = f"https://www.bing.com/search?q={requests.utils.quote(query)}"
             resp = requests.get(url, headers=self.headers, timeout=10)
             if resp.status_code == 200:
                 soup = BeautifulSoup(resp.text, 'html.parser')
-                results = soup.find_all('div', class_='result__body', limit=limit)
-                
+                results = soup.find_all('li', class_='b_algo', limit=limit)
+
                 if not results:
-                    return f"'{query}' üzrə internetdə açıq məlumat tapılmadı."
-                
-                output = [f"### Canlı İnternet Axtarış Nəticələri ('{query}'):\n"]
+                    return f"'{query}' uzre internetde acıq melumat tapılmadı."
+
+                output = [f"### Canlı Internet Axtarış Neticeleri ('{query}'):"]
                 for idx, res in enumerate(results, 1):
-                    title_tag = res.find('a', class_='result__a')
-                    snippet_tag = res.find('a', class_='result__snippet')
-                    
+                    title_tag = res.find('h2')
+                    link_tag = title_tag.find('a') if title_tag else None
+                    snippet_tag = res.find('p')
+
                     title = title_tag.text.strip() if title_tag else "Başlıq yoxdur"
-                    raw_link = title_tag['href'] if title_tag and 'href' in title_tag.attrs else ""
+                    raw_link = link_tag['href'] if link_tag and 'href' in link_tag.attrs else ""
                     clean_link = self.clean_target_url(raw_link)
                     snippet = snippet_tag.text.strip() if snippet_tag else ""
-                    
-                    output.append(f"{idx}. **{title}**\n   {snippet}\n   Keçid: {clean_link}\n")
+
+                    line = str(idx) + ". **" + title + "**  " + snippet + "  Kecid: " + clean_link
+                    output.append(line)
                 return "\n".join(output)
             else:
                 return f"Axtarış xətası (Status kodu: {resp.status_code})"
