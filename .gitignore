@@ -1,5 +1,10 @@
 __pycache__/
 *.pyc
-*.bak
-test_*.cpp
-demo_*.cpp
+*.json
+*.html
+.env
+venv/
+scan_report.json
+output_report.html
+logs/
+.env
