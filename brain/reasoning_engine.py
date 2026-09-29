@@ -25,7 +25,7 @@ class ReasoningEngine:
             if repo_match:
                 repo_path = repo_match.group(1)
                 steps.append({"type": "THOUGHT", "text": f"GitHub deponuz tespit edildi: '{repo_path}'"})
-                res = self.skills["repo_inspect"].run(repo_path=repo_path)
+                res = self._run_skill("repo_inspect", repo_path=repo_path)
                 output_payload = res
                 steps.append({"type": "OBSERVATION", "text": "Depo README dosyası incelendi."})
 
@@ -34,14 +34,14 @@ class ReasoningEngine:
             user_match = re.search(r'github\.com/([a-zA-Z0-9-]+)', prompt)
             username = user_match.group(1) if user_match else prompt
             steps.append({"type": "THOUGHT", "text": f"GitHub profili tespit edildi: '{username}'"})
-            res = self.skills["github_osint"].run(username=username)
+            res = self._run_skill("github_osint", username=username)
             output_payload = res
             steps.append({"type": "OBSERVATION", "text": "Profil verileri API üzerinden çekildi."})
 
         # 3. Sistem Bilgisi Sorgusu
         elif any(k in prompt_lower for k in ["sistem", "termux", "specs", "donanım", "sistem bilgisi"]):
             steps.append({"type": "THOUGHT", "text": "Sistem bilgileri toplanıyor..."})
-            res = self.skills["system_info"].run()
+            res = self._run_skill("system_info")
             output_payload = res
             steps.append({"type": "OBSERVATION", "text": "Sistem detayları çekildi."})
 
@@ -51,7 +51,7 @@ class ReasoningEngine:
             raw_url = url_match.group(0)
             clean_url = self._url_tool.clean_target_url(raw_url)
             steps.append({"type": "THOUGHT", "text": f"Sayfa içeriği çekiliyor: '{clean_url}'"})
-            res = self.skills["web_fetch"].run(url=clean_url)
+            res = self._run_skill("web_fetch", url=clean_url)
             output_payload = res
             steps.append({"type": "OBSERVATION", "text": "İçerik okundu."})
 
@@ -60,19 +60,29 @@ class ReasoningEngine:
             domains = re.findall(r'(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}', prompt)
             domain = domains[0] if domains else prompt
             steps.append({"type": "THOUGHT", "text": f"Domen OSINT analizi icra olunur: '{domain}'"})
-            res = self.skills["domain_osint"].run(domain=domain)
+            res = self._run_skill("domain_osint", domain=domain)
             output_payload = res
             steps.append({"type": "OBSERVATION", "text": "OSINT analizi tamamlandı."})
 
         # 6. Canlı Web Araması
         else:
             steps.append({"type": "THOUGHT", "text": f"İnternetdə canlı axtarış aparılır: '{prompt}'"})
-            search_res = self.skills["web_search"].run(query=prompt)
+            search_res = self._run_skill("web_search", query=prompt)
             output_payload = search_res
             steps.append({"type": "OBSERVATION", "text": "İnternet axtarışı yekunlaşdı."})
 
         steps.append({"type": "THOUGHT", "text": "Həll tamamlandı."})
         return steps, output_payload
+
+
+    def _run_skill(self, name, **kwargs):
+        skill = self.skills[name]
+        if getattr(skill, "risk", "low") in ("medium", "high"):
+            print(f"\n[!] '{name}' aləti '{skill.risk}' risk səviyyəsindədir.")
+            answer = input("Davam etmək istəyirsinizmi? (bəli/xeyr): ").strip().lower()
+            if answer not in ("bəli", "beli", "yes", "y"):
+                return "İstifadəçi tərəfindən ləğv edildi."
+        return skill.run(**kwargs)
 
     def generate_thought_trace(self, prompt: str, intent_data: dict, max_steps: int = 5):
         import re as _re

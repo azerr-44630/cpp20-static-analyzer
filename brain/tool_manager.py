@@ -104,13 +104,35 @@ class ToolManager:
         except Exception as e:
             return f"Sistem məlumatı alınamadı: {e}"
 
+    def _clean_query(self, query: str) -> str:
+        junk = [
+            "haqqında məlumat ver", "haqqında ətraflı məlumat ver",
+            "haqqında danış", "haqqında bilgi ver", "izah et",
+            "haqqında", "nədir", "kimdir", "mənə de",
+        ]
+        q = query.lower()
+        for j in junk:
+            q = q.replace(j, "")
+        return q.strip() or query
+
     def web_search(self, query: str, limit: int = 5) -> str:
+        query = self._clean_query(query)
         try:
             url = f"https://www.bing.com/search?q={requests.utils.quote(query)}"
             resp = requests.get(url, headers=self.headers, timeout=10)
             if resp.status_code == 200:
                 soup = BeautifulSoup(resp.text, 'html.parser')
                 results = soup.find_all('li', class_='b_algo', limit=limit)
+                if not results:
+                    results = soup.select('li.b_algo, div.b_algo, li[class*="algo"]')[:limit]
+                if not results:
+                    # Ehtiyat variant: bütün h2 başlıqlarını əsas kimi götür
+                    fallback = []
+                    for h2 in soup.find_all('h2', limit=limit):
+                        a = h2.find('a')
+                        if a and a.get('href'):
+                            fallback.append(h2.parent)
+                    results = fallback
 
                 if not results:
                     return f"'{query}' uzre internetde acıq melumat tapılmadı."
