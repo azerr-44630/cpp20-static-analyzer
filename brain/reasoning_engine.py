@@ -7,6 +7,7 @@ class ReasoningEngine:
         self.ke = knowledge_engine
         self.skills = load_skills()
         self._url_tool = ToolManager()
+        self.last_skill_used = None
 
     def _process_single(self, prompt: str, intent_data: dict):
         steps = []
@@ -76,6 +77,7 @@ class ReasoningEngine:
 
 
     def _run_skill(self, name, **kwargs):
+        self.last_skill_used = name
         skill = self.skills[name]
         if getattr(skill, "risk", "low") in ("medium", "high"):
             print(f"\n[!] '{name}' aləti '{skill.risk}' risk səviyyəsindədir.")

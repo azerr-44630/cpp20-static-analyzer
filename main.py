@@ -64,7 +64,7 @@ def main():
             print("=" * 45)
 
             if target:
-                log_action("main_loop", target, "success")
+                log_action(re.last_skill_used or "unknown", target, "success")
 
         except KeyboardInterrupt:
             print("\nDayandırıldı.")
