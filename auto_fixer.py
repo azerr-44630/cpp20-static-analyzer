@@ -6,8 +6,9 @@ from ast_engine import CppASTAnalyzer
 DB_NAME = "agent_memory.db"
 
 class AutoFixer:
-    def __init__(self, db_path=DB_NAME):
+    def __init__(self, db_path=DB_NAME, dry_run=True):
         self.db_path = db_path
+        self.dry_run = dry_run
         self._init_db()
 
     def _init_db(self):
@@ -61,11 +62,21 @@ class AutoFixer:
                 print(f"  [FIXED] {file_path}:{issue['line']} -> {fixed.strip()}")
 
         if file_fixed:
-            try:
-                with open(file_path, "w", encoding="utf-8") as f:
-                    f.writelines(lines)
-            except Exception as e:
-                print(f"  [x] Fayla yazılmadı ({file_path}): {e}")
+            if self.dry_run:
+                print(f"  [DRY-RUN] {file_path} dəyişdirilməyəcək (dry_run=True).")
+            else:
+                backup_path = file_path + ".bak"
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        original_content = f.read()
+                    with open(backup_path, "w", encoding="utf-8") as f:
+                        f.write(original_content)
+                    print(f"  [BACKUP] {backup_path} yaradıldı.")
+
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        f.writelines(lines)
+                except Exception as e:
+                    print(f"  [x] Fayla yazılmadı ({file_path}): {e}")
 
         conn.commit()
         conn.close()
@@ -81,9 +92,12 @@ class AutoFixer:
         for fp in files_with_issues:
             self.fix_file(fp, issues)
 
-def apply_auto_fix(directory="."):
-    fixer = AutoFixer()
+def apply_auto_fix(directory=".", dry_run=True):
+    fixer = AutoFixer(dry_run=dry_run)
     fixer.run_fixes(directory)
+    if dry_run:
+        print("\n[!] Bu DRY-RUN idi, heç bir fayl dəyişdirilmədi.")
+        print("[!] Real dəyişiklik üçün: apply_auto_fix(dry_run=False)")
 
 def show_fix_history():
     conn = sqlite3.connect(DB_NAME)

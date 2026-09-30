@@ -11,17 +11,26 @@ class CppASTAnalyzer:
             with open(file_path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
 
+            patterns = [
+                (r'\bnew\s+\w+\s*\[', "raw_pointer_array"),
+                (r'\bstrcpy\s*\(', "unsafe_strcpy"),
+                (r'\bsprintf\s*\(', "unsafe_sprintf"),
+                (r'\bgets\s*\(', "unsafe_gets"),
+                (r'\bstrcat\s*\(', "unsafe_strcat"),
+                (r'\bmalloc\s*\(', "manual_malloc"),
+            ]
+
             for idx, line in enumerate(lines, 1):
-                # Xam pointer massiv pattern-i: new T[...]
-                if re.search(r'\bnew\s+\w+\s*\[', line):
-                    issue = {
-                        "file": file_path,
-                        "line": idx,
-                        "type": "raw_pointer_array",
-                        "code": line.strip()
-                    }
-                    file_issues.append(issue)
-                    self.issues.append(issue)
+                for pattern, issue_type in patterns:
+                    if re.search(pattern, line):
+                        issue = {
+                            "file": file_path,
+                            "line": idx,
+                            "type": issue_type,
+                            "code": line.strip()
+                        }
+                        file_issues.append(issue)
+                        self.issues.append(issue)
         except Exception as e:
             print(f"  [x] Fayl oxunmadı ({file_path}): {e}")
         return file_issues
