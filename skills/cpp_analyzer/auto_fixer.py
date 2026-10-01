@@ -1,7 +1,7 @@
 import os
 import sqlite3
 import re
-from ast_engine import CppASTAnalyzer
+from skills.cpp_analyzer.ast_engine import CppASTAnalyzer
 
 DB_NAME = "agent_memory.db"
 
