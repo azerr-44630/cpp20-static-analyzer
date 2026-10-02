@@ -57,6 +57,11 @@ class ReasoningEngine:
             steps.append({"type": "OBSERVATION", "text": "İçerik okundu."})
 
         # 5. Domain OSINT
+        elif any(k in prompt_lower for k in ["c++", "cpp", "c20"]) and any(k in prompt_lower for k in ["skan", "scan", "yoxla", "audit", "analiz"]):
+            steps.append({"type": "THOUGHT", "text": "C++ kodunda təhlükəsizlik skanı icra olunur: '.'"})
+            res = self._run_skill("cpp_scan", directory=".")
+            output_payload = res
+            steps.append({"type": "OBSERVATION", "text": "C++ skanı tamamlandı."})
         elif any(k in prompt_lower for k in ["osint", "ip", "server", "header", "domen təhlil", "skan", "scan", "yoxla", "test et", "audit"]):
             domains = re.findall(r'(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}', prompt)
             domain = domains[0] if domains else prompt
